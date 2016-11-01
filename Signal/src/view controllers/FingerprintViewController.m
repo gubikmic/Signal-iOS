@@ -189,13 +189,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)resetSession
 {
-    DDLogInfo(@"%@ local user reset session", self.tag);
-    [self.storageManager removeIdentityKeyForRecipient:self.fingerprint.theirStableId];
-    [self.storageManager deleteAllSessionsForContact:self.fingerprint.theirStableId];
-
-    [[[TSInfoMessage alloc] initWithTimestamp:[NSDate ows_millisecondTimeStamp]
-                                     inThread:self.thread
-                                  messageType:TSInfoMessageTypeSessionDidEnd] save];
+    [OWSSessionResetJob runWithRecipientId:self.fingerprint.theirStableId
+                                    thread:self.thread
+                            storageManager:self.storageManager];
 
     [self dismissViewControllerAnimated:YES completion:nil];
 }

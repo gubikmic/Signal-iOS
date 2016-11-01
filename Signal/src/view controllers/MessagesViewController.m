@@ -27,6 +27,7 @@
 #import "OWSOutgoingMessageCollectionViewCell.h"
 #import "PhoneManager.h"
 #import "PropertyListPreferences.h"
+#import "Signal-Swift.h"
 #import "SignalKeyingStorage.h"
 #import "TSAttachmentPointer.h"
 #import "TSCall.h"
@@ -1457,7 +1458,53 @@ typedef enum : NSUInteger {
 {
     if ([message isKindOfClass:[TSInvalidIdentityKeyErrorMessage class]]) {
         [self tappedInvalidIdentityKeyErrorMessage:(TSInvalidIdentityKeyErrorMessage *)message];
+    } else if (message.errorType == TSErrorMessageInvalidMessage) {
+        [self tappedCorruptedMessage:message];
+    } else {
+        DDLogWarn(@"%@ Unhandled tap for error message:%@", self.tag, message);
     }
+}
+
+- (void)tappedCorruptedMessage:(TSErrorMessage *)message
+{
+
+    NSString *actionSheetTitle = [NSString
+        stringWithFormat:NSLocalizedString(@"CORRUPTED_SESSION_DESCRIPTION", @"ActionSheet title"), self.thread.name];
+
+    [DJWActionSheet showInView:self.view
+                     withTitle:actionSheetTitle
+             cancelButtonTitle:NSLocalizedString(@"TXT_CANCEL_TITLE", @"")
+        destructiveButtonTitle:nil
+             otherButtonTitles:@[ NSLocalizedString(@"FINGERPRINT_SHRED_KEYMATERIAL_BUTTON", nil) ]
+                      tapBlock:^(DJWActionSheet *actionSheet, NSInteger tappedButtonIndex) {
+                          if (tappedButtonIndex == actionSheet.cancelButtonIndex) {
+                              DDLogDebug(@"User Cancelled");
+                          } else if (tappedButtonIndex == actionSheet.destructiveButtonIndex) {
+                              DDLogDebug(@"Destructive button tapped");
+                          } else {
+                              switch (tappedButtonIndex) {
+                                  case 0: {
+                                      // TODO subclass error message as
+                                      // "senderErrorMessage" or something
+                                      // to have theirSignalId
+                                      if (![self.thread isKindOfClass:[TSContactThread class]]) {
+                                          // Corrupt Message errors only appear in contact threads.
+                                          DDLogError(
+                                              @"%@ Unexpected request to reset session in group thread. Refusing",
+                                              self.tag);
+                                          return;
+                                      }
+                                      TSContactThread *contactThread = (TSContactThread *)self.thread;
+                                      [OWSSessionResetJob runWithCorruptedMessage:message
+                                                                    contactThread:contactThread
+                                                                   storageManager:self.storageManager];
+                                      break;
+                                  }
+                                  default:
+                                      break;
+                              }
+                          }
+                      }];
 }
 
 - (void)tappedInvalidIdentityKeyErrorMessage:(TSInvalidIdentityKeyErrorMessage *)errorMessage
